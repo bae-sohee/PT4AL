@@ -8,6 +8,15 @@ import torchvision.transforms as transforms
 import numpy as np
 import random
 import cv2
+import torchvision.transforms.functional as F
+
+from CutPaste import CutPaste
+
+# CutPaste Object
+
+make_cutpaste = CutPaste()
+
+num_classes = 2                                               #########################
 
 class RotationLoader(Dataset):
     def __init__(self, is_train=True, transform=None, path='./DATA'):
@@ -50,6 +59,8 @@ class Loader2(Dataset):
         self.is_train = is_train
         self.transform = transform
         self.path_list = path_list
+        self.label_dict = {'good': 0, 'defective' :1}  #Initialize a dictionary that maps class labels to numbers 
+        ############################## 
 
         if self.is_train: # train
             self.img_path = path_list
@@ -71,16 +82,16 @@ class Loader2(Dataset):
                 img = cv2.imread(self.img_path[idx][:-1])
         img = Image.fromarray(img)
         img = self.transform(img)
-        label = int(self.img_path[idx].split('/')[-2])
+        label = self.label_dict[self.img_path[idx].split('/')[-2]]
 
         return img, label
     
 class Loader_Cold(Dataset):
     def __init__(self, is_train=True, transform=None, path='./DATA'):
-        self.classes = 10
+        self.classes = num_classes
         self.is_train = is_train
         self.transform = transform
-        with open('/workspace/A/PT4AL/loss/batch_5.txt', 'r') as f:
+        with open('./loss/batch_9.txt', 'r') as f: 
             self.list = f.readlines()
         self.list = [self.list[i*5] for i in range(1000)]
         if self.is_train==True: # train
@@ -104,9 +115,12 @@ class Loader_Cold(Dataset):
     
 class Loader(Dataset):
     def __init__(self, is_train=True, transform=None, path='./DATA'):
-        self.classes = 10 
+        self.classes = num_classes
         self.is_train = is_train
         self.transform = transform
+        self.label_dict = { 'good': 0, 'defective' :1}  #Initialize a dictionary that maps class labels to numbers 
+                                    ##############################
+
         if self.is_train: # train
             self.img_path = glob.glob('./DATA/train/*/*')
         else:
@@ -119,6 +133,48 @@ class Loader(Dataset):
         img = cv2.imread(self.img_path[idx])
         img = Image.fromarray(img)
         img = self.transform(img)
-        label = int(self.img_path[idx].split('/')[-2])
+        label = self.label_dict[self.img_path[idx].split('/')[-2]]
 
         return img, label
+
+class MvtecLoader(Dataset):
+    def __init__(self, is_train=True, transform=None, path='./DATA'):
+        self.is_train = is_train
+        self.transform = transform
+        self.make_cutpaste = CutPaste
+
+        if self.is_train == 0: # train
+            self.img_path = glob.glob('./DATA/train/*/*')
+        else:
+            self.img_path = glob.glob('./DATA/train/*/*')
+    def __len__(self):
+        return len(self.img_path)
+
+    def __getitem__(self, idx):
+        img = cv2.imread(self.img_path[idx])
+        img = Image.fromarray(img)
+
+        img1 = np.array(make_cutpaste.cutpaste(Image.open(self.img_path[idx])))
+        img2 = np.array(make_cutpaste.cutpaste(Image.open(self.img_path[idx])))
+
+        img1 = Image.fromarray(img1)
+        img2 = Image.fromarray(img2)
+
+        # cutpaste coded needed here
+        if self.is_train:
+            img = self.transform(img)
+            img1 = self.transform(img1)
+            img2 = self.transform(img2)
+            imgs = [img, img1, img2]
+            cutpates = [0,1,2]
+            random.shuffle(cutpates)
+            return imgs[cutpates[0]], imgs[cutpates[1]], imgs[cutpates[2]], cutpates[0], cutpates[1], cutpates[2]
+        
+        else:
+            img = self.transform(img)
+            img1 = self.transform(img1)
+            img2 = self.transform(img2)
+            imgs = [img, img1, img2]
+            cutpates = [0,1,2]
+            random.shuffle(cutpates)
+            return imgs[cutpates[0]], imgs[cutpates[1]], imgs[cutpates[2]], cutpates[0], cutpates[1], cutpates[2],  self.img_path[idx]
