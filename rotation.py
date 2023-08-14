@@ -18,52 +18,63 @@ from utils import progress_bar
 import numpy as np
 
 
-parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training')
+# parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training')
+parser = argparse.ArgumentParser(description='PyTorch MVTec Training')
 parser.add_argument('--lr', default=0.1, type=float, help='learning rate')
 parser.add_argument('--resume', '-r', action='store_true',
                     help='resume from checkpoint')
 args = parser.parse_args()
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
+print("Current device:", device)
+
 best_acc = 0  # best test accuracy
 start_epoch = 0  # start from epoch 0 or last checkpoint epoch
 
-# Data
-print('==> Preparing data..')
-transform_train = transforms.Compose([
-    transforms.RandomCrop(32, padding=4),
-    transforms.RandomHorizontalFlip(),
-    transforms.ToTensor(),
-    transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
-])
 
-transform_test = transforms.Compose([
-    transforms.ToTensor(),
-    transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
-])
+# MVTec Data
+print('==> Preparing data..')
+transform_train = transforms.Compose([transforms.Resize((256, 256)),                                   #########################
+                                      #     transforms.RandomCrop(32, padding=4),
+                                      #     transforms.RandomHorizontalFlip(),
+                                      transforms.ToTensor(),
+                                      transforms.Normalize([0.3337, 0.3064, 0.3171], [0.2672, 0.2564, 0.2629])])
+
+transform_test = transforms.Compose([transforms.Resize((256, 256)),
+                                    transforms.ToTensor(), 
+                                    transforms.Normalize([0.3337, 0.3064, 0.3171], [0.2672, 0.2564, 0.2629])])
 
 trainset = RotationLoader(is_train=True, transform=transform_test)
-trainloader = torch.utils.data.DataLoader(trainset, batch_size=256, shuffle=True, num_workers=2)
+n_train_batches = 10
+train_batch_size = len(trainset) // n_train_batches
+trainloader = torch.utils.data.DataLoader(trainset, batch_size=train_batch_size, shuffle=True, num_workers=2)
+print(train_batch_size)
+
 
 testset = RotationLoader(is_train=False,  transform=transform_test)
-testloader = torch.utils.data.DataLoader(testset, batch_size=100, shuffle=False, num_workers=2)
+n_test_batches = 10
+test_batch_size = len(testset) // n_test_batches
+testloader = torch.utils.data.DataLoader(testset, batch_size = test_batch_size, shuffle=False, num_workers=2)
+print(test_batch_size)
 
-classes = ('plane', 'car', 'bird', 'cat', 'deer',
-           'dog', 'frog', 'horse', 'ship', 'truck')
 
 # Model
 print('==> Building model..')
-net = ResNet18()
-net.linear = nn.Linear(512, 4)
-net = net.to(device)
+# net = ResNet18()
+# net.linear = nn.Linear(512, 4)
+# net = net.to(device)
 
+import torchvision.models as models
+pretrained_resnet = models.resnet18(pretrained=True)
+pretrained_resnet.fc = nn.Linear(pretrained_resnet.fc.in_features, 4)  # Assuming 4 classes
+pretrained_resnet = pretrained_resnet.to(device)
 
 if device == 'cuda':
-    net = torch.nn.DataParallel(net)
+    net = torch.nn.DataParallel(pretrained_resnet)
     cudnn.benchmark = True
 
 criterion = nn.CrossEntropyLoss()
-optimizer = optim.SGD(net.parameters(), lr=0.1, momentum=0.9, weight_decay=5e-4)
+optimizer = optim.Adam(net.parameters(), lr=0.001, weight_decay=5e-4)
 scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[30, 60, 90])
 
 # Training
